@@ -1,12 +1,34 @@
 #!/bin/bash
+##################################
+# Credits to the original authors:
+# https://github.com/lowet84  (original author)
+# https://github.com/M0nsieurChat (updates for Kubernetes >=1.6.3 compatibility)
+##################################
+#########
+# Derived from M0nsieurChat's version and overhauled for Kubernetes >= 1.7.x compatiblity
+#########
+
+VERSION='v1.7.2'
+
+DEBUG=${MFSDEBUG:-0}
+[[ -f /.mfsdebug ]] && DEBUG=1
+
+date=$(date '+%Y%m%d/%H:%M:%S')
+d_log='/var/log/flex-volume/lizardfs'
+op="$1"
+
+if [[ ! -d "${d_log}" ]]; then
+	mkdir -p "${d_log}"
+	chmod o= "${d_log}"
+fi
 
 usage() {
-	err "Invalid usage. Usage: "
-	err "\t$0 init"
-	err "\t$0 attach <json params>"
-	err "\t$0 detach <mount device>"
-	err "\t$0 mount <mount dir> <mount device> <json params>"
-	err "\t$0 unmount <mount dir>"
+	exec 1>&2
+	printf "usage: %s {init|mount|unmount} ...\n" "$(basename $0)"
+	echo   "          init"
+	echo   "          mount <mount dir> <json params>"
+	echo   "          unmount <mount dir>"
+	echo   "version: ${VERSION}"
 	exit 1
 }
 
@@ -18,137 +40,166 @@ log() {
 	echo -ne $* >&1
 }
 
-detach() {
-	log "{\"status\": \"Not supported\" }"
+logNotSupported() {
+	log '{"status": "Not supported"}'
+        exit 0
+}
+
+logSuccess() {
+	log '{"status": "Success"}'
 	exit 0
 }
 
 ismounted() {
-	MOUNT=`findmnt -n ${MNTPATH} 2>/dev/null | cut -d' ' -f1`
-	if [ "${MOUNT}" == "${MNTPATH}" ]; then
-		echo "1"
-	else
-		echo "0"
+	local MNTPATH="$1"
+
+	local MOUNT=$(findmnt -n "${MNTPATH}" 2>/dev/null | cut -d' ' -f1)
+	if [[ "${MOUNT}" = "${MNTPATH}" ]]; then
+		return 0
 	fi
+
+	return 1
 }
 
 unmount() {
-	MNTPATH=$1
-	echo $1 $2 $3 $4 >> unmount.log
-	if [ $(ismounted) -eq 0 ] ; then
-		log "{\"status\": \"Success\"}"
-		exit 0
+	(( DEBUG )) && echo "${date}:DOUNMOUNT: $@" >> "${d_log}/unmount.log"
+
+	local MNTPATH="$1"
+
+	if ! ismounted "${MNTPATH}"; then
+		logSuccess
 	fi
 
-	umount ${MNTPATH} &> /dev/null
-	if [ $? -ne 0 ]; then
-		err "{ \"status\": \"Failed\", \"message\": \"Failed to unmount volume at ${MNTPATH}\"}"
+	if ! umount "${MNTPATH}" &> /dev/null; then
+		err '{"status": "Failed", "message": "Failed to unmount volume at ' "${MNTPATH}" '}'
 		exit 1
 	fi
-	rmdir ${MNTPATH} &> /dev/null
 
-	log "{\"status\": \"Success\"}"
-	exit 0
+	if ! rmdir "${MNTPATH}" &> /dev/null; then
+		# Only emit an error message, but allow as success since it was unmounted correctly above
+		err '{"status": "Failed", "message": "Failed to unmount volume at ' "${MNTPATH}" '}'
+	fi
+
+	logSuccess
 }
-
-attach() {
-	log "{\"status\": \"Not supported\" }"
-	exit 0
-}
-
-
-getvolumename() {
-	log "{\"status\": \"Not supported\" }"
-        exit 0
-}
-
-waitforattach() {
-# Whatever, you can't attach/detach/waitforattach a LizardFS volume (same as NFS) : return some junk
-  log "{\"status\": \"Success\", \"device\": \"/dev/bounded-local\"}"
-  exit
-}
-
 
 domount() {
+	(( DEBUG )) && echo "${date}:DOMOUNT: $@" >> "${d_log}/mount.log"
 
-	MNTPATH=$1
-	LFSFOLDER=${MNTPATH##*/}
+	local MNTPATH="$1"
+	local LFSFOLDER="${MNTPATH##*/}"
+
+	local f_config=
+	local from_secret=0
+	local msgPassword=
+	local PASSWORD=
 
 	# Okay, I want to provision the folder in the root of my LizardFS : each pod bound to a PVC bound to a PV has a folder created (folder name is the PV name bound to the PVC)
 	# Obvisouly you need to have a fuse mountpoint on /mnt pointing to the root of your LizardFS.
 	# TO DO : Automated quickmount -> mkdir -> unmount so all the logic is embedded in the flexvolume driver.
-	mkdir -p /mnt/$LFSFOLDER
+	mkdir -p "/mnt/$LFSFOLDER"
 
 	# It appears the controllers do a first request on mount with the following arguments :
 	# /var/lib/kubelet/plugins/kubernetes.io/flexvolume/lowet84/lizardfs/mounts/mfs-volume /dev/bounded-local {"host":"mfsmaster","kubernetes.io/fsType":"","kubernetes.io/readwrite":"rw","port":"9421"}
 	#   $PATH (we don't want to mount that obvisouly) 			$DEV 	$JSON_OPTS
 	# I don't know the usefulness of this, thus, we return success for the subsequent query with the correct parameters
-	if [ $# -eq 3 ]
-  	then
-		log "{\"status\": \"Success\"}"
+
+	#TT:FIXME???: I'm not sure if this is still the case for 1.7.x with init() emitting "capabilities": {"attach": false}
+	if (( $# == 3 )); then
+		logSuccess
+	elif ismounted "${MNTPATH}"; then
 		exit 0
-	else
+	fi
+
 	# /var/lib/kubelet/pods/c6f7f490-6009-11e7-83d0-005056af1192/volumes/lowet84~lizardfs/mfs-volume {"host":"mfsmaster","kubernetes.io/fsType":"","kubernetes.io/readwrite":"rw","port":"9421"}
 	#  $PATH		$JSON_OPTS
-		HOST=$(echo $2|jq -r '.["host"]')
-		PORT=$(echo $2|jq -r '.["port"]')
-	fi
+	HOST=$(jq -r '.host // empty' <<<"$2")
 
-	if [ $(ismounted) -eq 1 ] ; then
-		log "{\"status\": \"Success\"}"
-		exit 0
-	fi
-
-	mkdir -p ${MNTPATH} &> /dev/null
-        echo "mfsmount -H $HOST -P $PORT -o big_writes,nosuid,nodev,noatime -S $LFSFOLDER $MNTPATH" >> mount.log
-
-	mfsmount -H $HOST -P $PORT -o big_writes,nosuid,nodev,noatime -S $LFSFOLDER $MNTPATH &> /dev/null
-
-	if [ $? -ne 0 ]; then
-		err "{ \"status\": \"Failure\", \"message\": \"Failed to mount lizardfs at ${MNTPATH}\"}"
+	# Error out if 'host' isn't provided
+	if [[ -z "${HOST}" ]]; then
+		err '{"status": "Failure", "message": "Cannot mount lizardfs volume without a specified host"}'
 		exit 1
 	fi
-	log "{\"status\": \"Success\"}"
-	exit 0
+
+	# Defaults to port 9421
+	PORT=$(jq -r '.port // "9421"' <<<"$2")
+
+	# Special handling is needed if mfsfolder is in play
+	MFSSUBFOLDER=$(jq -r '.mfssubfolder // empty' <<<"$2")
+
+	# Override derived LFSFOLDER with given MFSSUBFOLDER
+	if [[ -n "${MFSSUBFOLDER}" ]]; then
+		LFSFOLDER="${MFSSUBFOLDER}"
+	fi
+
+	#Password precedence:
+	# 1) mfspasswd option
+	# 2) kubernetes secret
+	PASSWORD=$(jq -r '.mfspassword // empty' <<<"$2")
+	if [[ -z "${PASSWORD}" ]]; then
+		#pull from secret
+		#NOTES
+		# 1) @base64d requires: jq > v1.5
+		# 2) Secret object must have spec type: fq/lizardfs
+		#PASSWORD=$(jq -r '.["kubernetes.io/secret/mfspassword"] | @base64d // empty' <<<"$2")
+		PASSWORD=$(jq -r '.["kubernetes.io/secret/mfspassword"] // empty' <<<"$2" | base64 -d)
+		[[ -z "${PASSWD}" ]] && from_secret=1
+	fi
+
+	if ! mkdir -p "${MNTPATH}" &> /dev/null; then
+		err '{"status": "Failure", "message": "Failed to create MNTPATH directory: ' "${MNTPATH}" '}'
+		exit 1
+	fi
+
+	# Past the point of no return, safe to setup mfsconfig
+	if f_config=$(mktemp --tmpdir=/tmp mfsmount-XXXXXXXX.conf); then
+		chmod 600 "${f_config}"
+		# Make sure any sensitive info is erased
+		(( ! DEBUG )) && trap "/bin/rm -f ${f_config} &> /dev/null" EXIT
+	else
+		err '{"status": "Failure", "message": "Failed to setup mfsmount config file"}'
+		exit 1
+	fi
+
+	# Push out mfs* option to the config file converting JSON object to 'key=value' store
+	#NOTE: if there is a more idiomatic jq way to accomplish this, please let me know
+	{
+		jq -r 'to_entries[] | if .key|startswith("mfs") then .key+"="+.value else empty end' <<<"$2"
+		(( from_secret )) && echo "mfspassword=${PASSWORD}"
+	} > "${f_config}"
+
+        echo "mfsmount -H ${HOST} -P ${PORT} -c ${f_config} -o big_writes,nosuid,nodev,noatime -S ${LFSFOLDER} ${MNTPATH} // JSON: $2" | scrub_password >> "${d_log}/mount.log"
+	if ! mfsmount -H "${HOST}" -P "${PORT}" -c ${f_config} -o big_writes,nosuid,nodev,noatime -S "${LFSFOLDER}" "${MNTPATH}" &> /dev/null; then
+		err '{"status": "Failure", "message": "Failed to mount lizardfs at ' "${MNTPATH}" '}'
+		exit 1
+	fi
+
+	logSuccess
 }
 
-op=$1
+scrub_password() {
+	if (( DEBUG )); then
+		cat
+	else
+		sed -e 's/\(mfspassword"\):"[^"]\+"/\1:"<redacted>"/g'
+	fi
+}
 
-if [ "$op" = "init" ]; then
-	log "{\"status\": \"Success\"}"
+if [[ "$op" = "init" ]]; then
+	(( DEBUG )) && echo "${date}:INIT: $@" >> /tmp/mount.log
+
+	log '{"status": "Success", "capabilities": {"attach": false}}'
 	exit 0
 fi
 
-if [ $# -lt 2 ]; then
+if (( $# < 2 )); then
 	usage
 fi
 
 shift
 
 case "$op" in
-	attach)
-		attach $*
-		;;
-	detach)
-		detach $*
-		;;
-	mount)
-		domount $*
-		;;
-	mountdevice)
-		domount $*
-		;;
-	unmount)
-		unmount $*
-		;;
-	getvolumename)
-		getvolumename $*
-		;;
-	waitforattach)
-		waitforattach $*
-		;;
-	*)
-		usage
+	mount)   domount $*;;
+	unmount) unmount $*;;
+	*)       logNotSupported;;
 esac
-
-exit 1
