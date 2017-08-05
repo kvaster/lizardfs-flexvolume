@@ -1,16 +1,42 @@
+# NOTE: This document is a work in progress
+
 # lizardfs-flexvolume
 
-This Kubernetes FlexVolume driver aims to provide an implementation for provisioning LizardFS volumes to a Kubernetes POD resource.
+This Kubernetes (>=1.7.0) FlexVolume driver aims to provide an implementation for provisioning LizardFS volumes to a Kubernetes POD resource.
 
-You shouldn't use this driver in production.
+It supports the following additional features over previous incantations of this driver:
+1. Supports mfspassword via spec options and also k8s secrets
+1. Supports mfs* options via spec (_TODO: use ConfigMap_)
 
 # Installation
 
-FlexVolumes drivers are pretty straightforward to install :
+## Ready-2-run hyperkube image with pre-installed LizardFS clients and FlexVolume driver
+https://quay.io/TerraTech/hyperkube
+
+This image contains the lizardfs-client binaries and fq~lizardfs FlexVolume driver.
+It is also custom patched to disable the SELinux relabeling requirement.
+Do not use this image if you are using FlexVolume driver for anything non-fuse based, e.g. LVM mounts
+
+## Manual install
+**WARNING**: This driver will not work in the stock hyperkube image!
+LizardFS is fuse based and the pod will never become ready as the mount cannot be SELinux relabeled and will fail: https://github.com/lizardfs/lizardfs/issues/581  
+Until this is fixed, use the above hyperkube image
+
+* If your /usr is a **ReadWrite** partition, you can use the default k8s FlexVolume driver location
 
 ```bash
-cp lizardfs /usr/libexec/kubernetes/kubelet-plugins/volume/exec/lowet84~lizardfs/
-chmod +x /usr/libexec/kubernetes/kubelet-plugins/volume/exec/lowet84~lizardfs/lizardfs
+cp -p lizardfs /usr/libexec/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs/
+chmod +x /usr/libexec/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs/lizardfs
+```
+*If your /usr is **ReadOnly**, like CoreOS, more work is needed
+```bash
+mkdir -p /etc/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs
+cp -p lizardfs /etc/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs/lizardfs
+chmod +x /etc/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs/lizardfs
+systemctl edit --full kubelet.service
+
+** Add the following kubelet option: --volume-plugin-dir=/etc/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs/
+** This path was chosen because hyperkube already mounts /etc/kubernetes into the container
 ```
 
 Then proceed to restart the Kubelet service
@@ -45,32 +71,6 @@ Then proceed with a basic POD creation using this PVC __test-1__ :
 kubectl create -f examples/deployment-using-lizardfs.yml
 ```
 
-## Kubernetes 1.6.X specific instructions
-Beware, if you're running the 1.6.X branch of Kubernetes, FlexVolume drivers without an implementation of attach/detach/waitforattach (like this one, or any other driver using a networked file system) will fail
-
-https://github.com/kubernetes/kubernetes/commit/d021db82045af0e55200a943b7db7fa71c558d2e
-
-Either you should :
-  - Wait for the next Kubernetes official release
-  - Compile Kubernetes against master (you shouldn't for production purposes)
-  - Disable __enable-controller-attach-detach__ on Kubelet startup : __--enable-controller-attach-detach=false__
-  
-Please follow last advice only if not running any other driver (out-of-tree or Kubernetes Integrated) needing this feature (FC, iSCSI..)
-  
-  
-# TO DO :
-
-```bash
-        # Okay, I want to provision the folder in the root of my LizardFS : each pod bound to a PVC bound to a PV has a folder created (folder name is the PV name bound to the PVC)
-        # Obvisouly you need to have a fuse mountpoint on /mnt pointing to the root of your LizardFS.
-        # TO DO : Automated quickmount -> mkdir -> unmount so all the logic is embedded in the flexvolume driver.
-        mkdir -p /mnt/$LFSFOLDER
-```
-
-This FlexVolume driver tries to make a new directory in the root of your lizardfs, prealably mounted in /mnt. 
-The goal of that behavior is to keep a folder structure matching the PersistentVolume names that were bound to the PersistentVolumeClaim.
-
-
 # CREDITS
-
 https://github.com/lowet84 for the first implementation as seen on https://github.com/lizardfs/lizardfs/issues/486
+https://github.com/M0nsieurChat (updates for Kubernetes >=1.6.3 compatibility)
