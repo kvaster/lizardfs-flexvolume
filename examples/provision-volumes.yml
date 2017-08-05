@@ -10,7 +10,7 @@ spec:
   accessModes:
     - ReadWriteMany
   flexVolume:
-    driver: "lowet84/lizardfs"
+    driver: "fq/lizardfs"
     options:
       host: "mfsmaster"
       port: "9421" 
@@ -28,7 +28,7 @@ spec:
   accessModes:
     - ReadWriteMany
   flexVolume:
-    driver: "lowet84/lizardfs"
+    driver: "fq/lizardfs"
     options:
       host: "mfsmaster"
       port: "9421"
@@ -46,18 +46,11 @@ spec:
   accessModes:
     - ReadWriteMany
   flexVolume:
-    driver: "lowet84/lizardfs"
+    driver: "fq/lizardfs"
     options:
       host: "mfsmaster"
       port: "9421"
   persistentVolumeReclaimPolicy: Retain
-
-
-
-
-
-
-
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
