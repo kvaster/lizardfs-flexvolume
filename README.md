@@ -22,13 +22,13 @@ Do not use this image if you are using FlexVolume driver for anything non-fuse b
 LizardFS is fuse based and the pod will never become ready as the mount cannot be SELinux relabeled and will fail: https://github.com/lizardfs/lizardfs/issues/581  
 Until this is fixed, use the above hyperkube image
 
-* If your /usr is a **ReadWrite** partition, you can use the default k8s FlexVolume driver location
+* If /usr is a **ReadWrite** partition, you can use the default k8s FlexVolume driver location.  Just make sure that your kubelet.service mounts this directory into your container.
 
 ```bash
 cp -p lizardfs /usr/libexec/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs/
 chmod +x /usr/libexec/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs/lizardfs
 ```
-*If your /usr is **ReadOnly**, like CoreOS, more work is needed
+*If /usr is **ReadOnly**, like CoreOS, more work is needed
 ```bash
 mkdir -p /etc/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs
 cp -p lizardfs /etc/kubernetes/kubelet-plugins/volume/exec/fq~lizardfs/lizardfs
