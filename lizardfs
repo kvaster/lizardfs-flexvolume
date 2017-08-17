@@ -8,7 +8,7 @@
 # Derived from M0nsieurChat's version and overhauled for Kubernetes >= 1.7.x compatiblity
 #########
 
-VERSION='v1.7.2'
+VERSION='v1.7.3'
 
 DEBUG=${MFSDEBUG:-0}
 [[ -f /.mfsdebug ]] && DEBUG=1
@@ -188,7 +188,7 @@ scrub_password() {
 if [[ "$op" = "init" ]]; then
 	(( DEBUG )) && echo "${date}:INIT: $@" >> /tmp/mount.log
 
-	log '{"status": "Success", "capabilities": {"attach": false}}'
+	log '{"status": "Success", "capabilities": {"attach": false, "selinuxRelabel": false}}'
 	exit 0
 fi
 
