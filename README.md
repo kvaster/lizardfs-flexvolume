@@ -11,14 +11,16 @@ It supports the following additional features over previous incantations of this
 # Installation
 
 ## Ready-2-run hyperkube image with pre-installed LizardFS clients and FlexVolume driver
-https://quay.io/TerraTech/hyperkube
+https://quay.io/repository/terratech/hyperkube-lizardfs-hardwired-amd64
 
 This image contains the lizardfs-client binaries and fq~lizardfs FlexVolume driver.
 It is also custom patched to disable the SELinux relabeling requirement.
 Do not use this image if you are using FlexVolume driver for anything non-fuse based, e.g. LVM mounts
 
 ## Manual install
-**WARNING**: This driver will not work in the stock hyperkube image!
+**WARNING**:  This driver will not work in the stock hyperkube image (<1.8.x)!  
+There is a PR to backport the SELinux relabeling capability to the 1.7.x series: https://github.com/kubernetes/kubernetes/pull/51201  
+
 LizardFS is fuse based and the pod will never become ready as the mount cannot be SELinux relabeled and will fail: https://github.com/lizardfs/lizardfs/issues/581  
 Until this is fixed, use the above hyperkube image
 
