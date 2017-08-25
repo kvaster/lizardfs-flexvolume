@@ -18,7 +18,7 @@ It is also custom patched to disable the SELinux relabeling requirement.
 Do not use this image if you are using FlexVolume driver for anything non-fuse based, e.g. LVM mounts
 
 ## Manual install
-**WARNING**:  This driver will not work in the stock hyperkube image (<1.8.x): https://github.com/kubernetes/kubernetes/pull/50548  
+**WARNING**:  This driver will not work in the stock hyperkube image (<1.8.x): https://github.com/kubernetes/kubernetes/pull/50843  
 There is a PR to backport the SELinux relabeling capability to the 1.7.x series: https://github.com/kubernetes/kubernetes/pull/51201  
 
 LizardFS is fuse based and the pod will never become ready as the mount cannot be SELinux relabeled and will fail: https://github.com/lizardfs/lizardfs/issues/581  
