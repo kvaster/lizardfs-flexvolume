@@ -71,13 +71,13 @@ unmount() {
 	fi
 
 	if ! umount "${MNTPATH}" &> /dev/null; then
-		err '{"status": "Failed", "message": "Failed to unmount volume at ' "${MNTPATH}" '}'
+		err '{"status": "Failed", "message": "Failed to unmount volume at \"'"${MNTPATH}"'\""}'
 		exit 1
 	fi
 
 	if ! rmdir "${MNTPATH}" &> /dev/null; then
 		# Only emit an error message, but allow as success since it was unmounted correctly above
-		err '{"status": "Failed", "message": "Failed to unmount volume at ' "${MNTPATH}" '}'
+		err '{"status": "Failed", "message": "Failed to unmount volume at \"'"${MNTPATH}"'\""}'
 	fi
 
 	logSuccess
@@ -147,7 +147,7 @@ domount() {
 	fi
 
 	if ! mkdir -p "${MNTPATH}" &> /dev/null; then
-		err '{"status": "Failure", "message": "Failed to create MNTPATH directory: ' "${MNTPATH}" '}'
+		err '{"status": "Failure", "message": "Failed to create MNTPATH directory: \"'"${MNTPATH}"'\""}'
 		exit 1
 	fi
 
@@ -170,7 +170,7 @@ domount() {
 
         echo "mfsmount -H ${HOST} -P ${PORT} -c ${f_config} -o big_writes,nosuid,nodev,noatime -S ${LFSFOLDER} ${MNTPATH} // JSON: $2" | scrub_password >> "${d_log}/mount.log"
 	if ! mfsmount -H "${HOST}" -P "${PORT}" -c ${f_config} -o big_writes,nosuid,nodev,noatime -S "${LFSFOLDER}" "${MNTPATH}" &> /dev/null; then
-		err '{"status": "Failure", "message": "Failed to mount lizardfs at ' "${MNTPATH}" '}'
+		err '{"status": "Failure", "message": "Failed to mount lizardfs at \"'"${MNTPATH}"'\""}'
 		exit 1
 	fi
 
