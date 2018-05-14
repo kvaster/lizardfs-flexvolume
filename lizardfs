@@ -33,12 +33,10 @@ usage() {
 }
 
 err() {
-	(( DEBUG )) && echo "${date}:ERROR: $*" >> "${d_log}/debug.log"
 	echo -ne $* 1>&2 '\n'
 }
 
 log() {
-	(( DEBUG )) && echo "${date}:OUTPUT: $*" >> "${d_log}/debug.log"
 	echo -ne $* >&1
 }
 
@@ -64,7 +62,7 @@ ismounted() {
 }
 
 unmount() {
-	(( DEBUG )) && echo "${date}:DOUNMOUNT: $@" >> "${d_log}/debug.log"
+	(( DEBUG )) && echo "${date}:DOUNMOUNT: $@" >> "${d_log}/unmount.log"
 
 	local MNTPATH="$1"
 
@@ -73,20 +71,20 @@ unmount() {
 	fi
 
 	if ! umount "${MNTPATH}" &> /dev/null; then
-		err '{"status": "Failed", "message": "Failed to unmount volume at \"'"${MNTPATH}"'\""}'
+		err '{"status": "Failed", "message": "Failed to unmount volume at ' "${MNTPATH}" '}'
 		exit 1
 	fi
 
 	if ! rmdir "${MNTPATH}" &> /dev/null; then
 		# Only emit an error message, but allow as success since it was unmounted correctly above
-		err '{"status": "Failed", "message": "Failed to unmount volume at \"'"${MNTPATH}"'\""}'
+		err '{"status": "Failed", "message": "Failed to unmount volume at ' "${MNTPATH}" '}'
 	fi
 
 	logSuccess
 }
 
 domount() {
-	(( DEBUG )) && echo "${date}:DOMOUNT: $@" >> "${d_log}/debug.log"
+	(( DEBUG )) && echo "${date}:DOMOUNT: $@" >> "${d_log}/mount.log"
 
 	local MNTPATH="$1"
 	local LFSFOLDER="${MNTPATH##*/}"
@@ -96,15 +94,10 @@ domount() {
 	local msgPassword=
 	local PASSWORD=
 
-	HOST=$(jq -r '.host // empty' <<<"$2")
-
 	# Okay, I want to provision the folder in the root of my LizardFS : each pod bound to a PVC bound to a PV has a folder created (folder name is the PV name bound to the PVC)
-  TMPDIR=$(mktemp -d)
-
-  mfsmount -H "${HOST}" -S / "${TMPDIR}"
-	mkdir -p "${TMPDIR}/$LFSFOLDER"
-  umount "${TMPDIR}"
-  rm -rf "${TMPDIR}"
+	# Obvisouly you need to have a fuse mountpoint on /mnt pointing to the root of your LizardFS.
+	# TO DO : Automated quickmount -> mkdir -> unmount so all the logic is embedded in the flexvolume driver.
+	mkdir -p "/mnt/$LFSFOLDER"
 
 	# It appears the controllers do a first request on mount with the following arguments :
 	# /var/lib/kubelet/plugins/kubernetes.io/flexvolume/lowet84/lizardfs/mounts/mfs-volume /dev/bounded-local {"host":"mfsmaster","kubernetes.io/fsType":"","kubernetes.io/readwrite":"rw","port":"9421"}
@@ -120,6 +113,7 @@ domount() {
 
 	# /var/lib/kubelet/pods/c6f7f490-6009-11e7-83d0-005056af1192/volumes/lowet84~lizardfs/mfs-volume {"host":"mfsmaster","kubernetes.io/fsType":"","kubernetes.io/readwrite":"rw","port":"9421"}
 	#  $PATH		$JSON_OPTS
+	HOST=$(jq -r '.host // empty' <<<"$2")
 
 	# Error out if 'host' isn't provided
 	if [[ -z "${HOST}" ]]; then
@@ -153,7 +147,7 @@ domount() {
 	fi
 
 	if ! mkdir -p "${MNTPATH}" &> /dev/null; then
-		err '{"status": "Failure", "message": "Failed to create MNTPATH directory: \"'"${MNTPATH}"'\""}'
+		err '{"status": "Failure", "message": "Failed to create MNTPATH directory: ' "${MNTPATH}" '}'
 		exit 1
 	fi
 
@@ -174,10 +168,9 @@ domount() {
 		(( from_secret )) && echo "mfspassword=${PASSWORD}"
 	} > "${f_config}"
 
-  (( DEBUG )) && echo "${date}:CALL: mfsmount -H ${HOST} -P ${PORT} -c ${f_config} -o big_writes,nosuid,nodev,noatime -S ${LFSFOLDER} ${MNTPATH} // JSON: $2" | scrub_password >> "${d_log}/debug.log"
-  MFSMOUNT_RES=$(mfsmount -H "${HOST}" -P "${PORT}" -c ${f_config} -o big_writes,nosuid,nodev,noatime -S "${LFSFOLDER}" "${MNTPATH}" 2>&1)
-	if [ "$?" -ne 0 ]; then
-		err '{"status": "Failure", "message": "Failed to mount lizardfs at \"'"${MNTPATH}"'\": \"'"${MFSMOUNT_RES}"'\""}'
+        echo "mfsmount -H ${HOST} -P ${PORT} -c ${f_config} -o big_writes,nosuid,nodev,noatime -S ${LFSFOLDER} ${MNTPATH} // JSON: $2" | scrub_password >> "${d_log}/mount.log"
+	if ! mfsmount -H "${HOST}" -P "${PORT}" -c ${f_config} -o big_writes,nosuid,nodev,noatime -S "${LFSFOLDER}" "${MNTPATH}" &> /dev/null; then
+		err '{"status": "Failure", "message": "Failed to mount lizardfs at ' "${MNTPATH}" '}'
 		exit 1
 	fi
 
@@ -193,7 +186,7 @@ scrub_password() {
 }
 
 if [[ "$op" = "init" ]]; then
-	(( DEBUG )) && echo "${date}:INIT: $@" >> "${d_log}/debug.log"
+	(( DEBUG )) && echo "${date}:INIT: $@" >> /tmp/mount.log
 
 	log '{"status": "Success", "capabilities": {"attach": false, "selinuxRelabel": false}}'
 	exit 0
