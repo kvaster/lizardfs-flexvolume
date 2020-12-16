@@ -1,19 +1,24 @@
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: testlizardfs
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      desc: lizardfs
   template: # create pods using pod definition in this template
     metadata:
       labels:
         role: busybox
         storage: shared
         other: label
+        desc: lizardfs
     spec:
       containers:
       - name: genericpod
         image: busybox
+        command: ["/bin/sleep","2592000"]
         ports:
         - containerPort: 80
         volumeMounts:
