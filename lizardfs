@@ -8,7 +8,7 @@
 # Derived from M0nsieurChat's version and overhauled for Kubernetes >= 1.7.x compatiblity
 #########
 
-VERSION='v1.8.0'
+VERSION='v1.8.1'
 
 DEBUG=${MFSDEBUG:-0}
 [[ -f /.mfsdebug ]] && DEBUG=1
