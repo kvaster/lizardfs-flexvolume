@@ -172,8 +172,8 @@ domount() {
 		(( from_secret )) && echo "mfspassword=${PASSWORD}"
 	} > "${f_config}"
 
-	(( DEBUG )) && echo "${date}:CALL: mfsmount -H ${HOST} -P ${PORT} -c ${f_config} -o big_writes,nosuid,nodev,noatime -S ${LFSFOLDER} ${MNTPATH} // JSON: $2" | scrub_password >> "${d_log}/debug.log"
-	MFSMOUNT_OUTPUT=$(mfsmount -H "${HOST}" -P "${PORT}" -c ${f_config} -o big_writes,nosuid,nodev,noatime -S "${LFSFOLDER}" "${MNTPATH}" 2>&1)
+	(( DEBUG )) && echo "${date}:CALL: mfsmount3 -H ${HOST} -P ${PORT} -c ${f_config} -o nosuid,nodev,noatime -S ${LFSFOLDER} ${MNTPATH} // JSON: $2" | scrub_password >> "${d_log}/debug.log"
+	MFSMOUNT_OUTPUT=$(mfsmount3 -H "${HOST}" -P "${PORT}" -c ${f_config} -o nosuid,nodev,noatime -S "${LFSFOLDER}" "${MNTPATH}" 2>&1)
 	if [ "$?" -ne 0 ]; then
 		err '{"status": "Failure", "message": "Failed to mount lizardfs at: '"${MNTPATH}"' :: ['"${MFSMOUNT_OUTPUT}"']"}'
 		exit 1
